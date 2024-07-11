@@ -1,0 +1,21 @@
+#input_data_dir: "/home/arr65/vs30_data_input_data/csv"
+#input_data_format : "csv"
+
+input_data_dir : "/home/arr65/vs30_data_input_data/sql"
+input_data_format : "sql"
+
+output_dir : "/home/arr65/vs30_data_output/"
+
+# data filtering
+min_separation_dist_m : 0.1
+
+min_allowed_data_value : -0.2
+
+max_num_allowed_repeated_digits : 3
+
+min_allowed_max_depth_m : 5
+
+min_allowed_depth_span_m : 5
+
+
+
