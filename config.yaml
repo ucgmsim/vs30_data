@@ -7,7 +7,9 @@ input_data_format : "sql"
 output_dir : "/home/arr65/vs30_data_output/"
 
 # data filtering
-min_separation_dist_m : 0.1
+min_CPT_separation_dist_m : 0.1
+
+max_num_unique_depth_values : 1
 
 min_allowed_data_value : -0.2
 
