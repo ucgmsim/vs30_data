@@ -50,8 +50,8 @@ if config.get_value("input_data_format") == "sql":
     cpt_locs = load_sql_db.cpt_locations(session)
 
 
-    # num_cpt_to_do = 1000
-    # cpt_locs = cpt_locs[:num_cpt_to_do]
+    num_cpt_to_do = 5000
+    cpt_locs = cpt_locs[:num_cpt_to_do]
 
     cpts = []
 
@@ -138,7 +138,7 @@ for count, cpt in enumerate(cpts):
         # Save every 1000 cpts
         vs_results_df.to_csv(output_dir / "vs_results.csv", index=False)
 
-
+vs_results_df.to_csv(output_dir / "vs_results.csv", index=False)
 print(f"time taken for vs calculation: {(time.time() - vs_calc_start_time)/60.0} minutes")
 
 print(f"total taken: {(time.time() - start_time)/60.0} minutes")
