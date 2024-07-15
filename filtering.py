@@ -15,7 +15,7 @@ def count_digits(arr):
     stringified = str(arr).replace("0", "").replace(".", "")
     return Counter(stringified)
 
-def skipped_record_entry(cpt_name, reason):
+def skipped_record_entry(cpt_name, reason, reason_description):
     """
     Create a skipped record entry.
 
@@ -32,7 +32,7 @@ def skipped_record_entry(cpt_name, reason):
         A DataFrame with columns "cpt_name" and "reason".
     """
 
-    return pd.DataFrame({"cpt_name": [cpt_name], "reason": [reason]})
+    return pd.DataFrame({"cpt_name": [cpt_name], "reason": [reason], "reason_description": [reason_description]})
 
 
 def no_data_in_cpt(cpt_name: str, cpt_record: np.array):
@@ -43,14 +43,14 @@ def no_data_in_cpt(cpt_name: str, cpt_record: np.array):
     :return:
     """
     if cpt_record.size == 0:
-        return skipped_record_entry(cpt_name, "Type 01: No data in record")
+        return skipped_record_entry(cpt_name, "Type 01", "No data in record")
     return None
 
 def duplicated_depth_values(cpt: CPT, max_num_unique_depth_values: int) -> bool:
 
     u, c = np.unique(cpt.depth, return_counts=True)
     if np.any([c > max_num_unique_depth_values]):
-        return skipped_record_entry(cpt.name, "Type 03: Duplicate depth detected - invalid CPT")
+        return skipped_record_entry(cpt.name, "Type 03","Duplicate depth detected - invalid CPT")
     return None
 
 
@@ -73,25 +73,26 @@ def values_less_than_threshold(cpt: CPT, threshold: float = 0.0) -> bool:
     # Check for invalid negative readings
     if any(cpt.Fs < threshold) or any(cpt.Qc < threshold) or any(cpt.u < threshold):
 
-        return skipped_record_entry(cpt.name, f"Type 04 : data values less than {threshold}")
+        return skipped_record_entry(cpt.name, f"Type 04", f"Data values less than {threshold}")
 
     return None
 
 def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> bool:
     if any(value > max_num_allowed_repeated_digits for fs_value in cpt.Fs for value in count_digits(fs_value).values()):
-        return skipped_record_entry(cpt.name, f"Type 05 : More than {max_num_allowed_repeated_digits} repeated digits indicating an instrument problem")
+        return skipped_record_entry(cpt.name, f"Type 05", f"More than {max_num_allowed_repeated_digits} repeated digits indicating an instrument problem")
     return None
 
 def insufficient_depth(cpt: CPT, min_allowed_max_depth_m: float = 5.0) -> bool:
 
     if np.max(cpt.depth) < min_allowed_max_depth_m:
-        return skipped_record_entry(cpt.name, f"Type 06 : Maximum depth less than {min_allowed_max_depth_m} m")
+        return skipped_record_entry(cpt.name, f"Type 06", f"Maximum depth less than {min_allowed_max_depth_m} m")
+
     return None
 
 def insufficient_depth_span(cpt: CPT, min_allowed_depth_span_m) -> bool:
 
-    if np.max(cpt.depth) - np.min(cpt.depth) < min_allowed_depth_span_m:
-        return skipped_record_entry(cpt.name, f"Type 07 : depth span less than {min_allowed_depth_span_m} m")
+    if (np.max(cpt.depth) - np.min(cpt.depth)) < min_allowed_depth_span_m:
+        return skipped_record_entry(cpt.name, f"Type 07",f"depth span less than {min_allowed_depth_span_m} m")
     return None
 
 # def filter_one_cpt_on_data_quality(cpt: CPT, filters: list[callable], filter_params: list) -> tuple[bool, pd.DataFrame]:
@@ -158,7 +159,7 @@ def filter_cpts_on_location_duplicates(cpts, min_CPT_separation_dist_m, skipped_
     for cpt in cpts:
 
         if cpt.name in dup_locs_cpt_names:
-            skipped_records_df = pd.concat([skipped_records_df, skipped_record_entry(cpt.name, f"Type 02: CPT within {min_CPT_separation_dist_m} m of another CPT")])
+            skipped_records_df = pd.concat([skipped_records_df, skipped_record_entry(cpt.name, f"Type 02", f"CPT within {min_CPT_separation_dist_m} m of another CPT")])
             continue
 
         preserved_cpts.append(cpt)
@@ -176,7 +177,6 @@ def filter_single_cpt_on_data_quality(cpt: CPT, data_quality_filters: list[calla
 
     if any(isinstance(item, pd.DataFrame) for item in skipped_records):
         return pd.concat(skipped_records, ignore_index=True)
-
     return None
 
 
@@ -189,23 +189,16 @@ def filter_cpts(cpts: list[CPT], min_CPT_separation_dist_m: float,
 
     cpts, skipped_records_df = filter_cpts_on_location_duplicates(cpts, min_CPT_separation_dist_m, skipped_records_df, dup_locs_output_dir)
 
-    print(f"Time taken for filtering on location duplicates: {(time.time() - t0)/60} minutes")
-
     data_quality_preserved_cpts = []
 
-    print('filtering on data quality')
     t1 = time.time()
 
     for cpt in cpts:
 
-        #print(f'doing cpt: {cpt.name}')
-
         skipped_record_entry = filter_single_cpt_on_data_quality(cpt, data_quality_filters, data_quality_filter_params)
 
         if skipped_record_entry is not None:
-
             skipped_records_df = pd.concat([skipped_records_df, skipped_record_entry])
-
             continue
 
         data_quality_preserved_cpts.append(cpt)

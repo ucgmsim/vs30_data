@@ -20,7 +20,8 @@ from sqlalchemy.orm import sessionmaker
 
 import load_sql_db
 import filtering
-from vs_calc import CPT, VsProfile, calculate_weighted_vs30
+from vs_calc import CPT, cpt_vs_correlations, vs30_correlations, VsProfile, calculate_weighted_vs30
+
 
 start_time = time.time()
 
@@ -48,15 +49,27 @@ if config.get_value("input_data_format") == "sql":
 
     cpt_locs = load_sql_db.cpt_locations(session)
 
-    # num_cpt_to_do = 100
+
+    # num_cpt_to_do = 1000
     # cpt_locs = cpt_locs[:num_cpt_to_do]
 
     cpts = []
 
+    # sql_index_list = []
+    # sql_cpt_name_list = []
+
     print('loading CPTs')
     for row_n, cpt_loc in enumerate(cpt_locs):
 
+        if row_n % 1000 == 0:  # print every 1000
+            print(f"{row_n + 1}/{len(cpt_locs)}: {cpt_loc.name}")
+
+        # sql_index_list.append(row_n)
+        # sql_cpt_name_list.append(cpt_loc.name)
+
         #print('loading cpt data for:', cpt_loc.name)
+
+        #print()
 
         cpt_records = load_sql_db.get_cpt_data(session, cpt_loc.name, columnwise=False)
 
@@ -69,9 +82,11 @@ if config.get_value("input_data_format") == "sql":
         cpts.append(CPT(cpt_loc.name, cpt_records[:,0], cpt_records[:,1], cpt_records[:,2], cpt_records[:,3],
                         cpt_loc.nztm_x, cpt_loc.nztm_y))
 
+# sql_index_df = pd.DataFrame({"sql_index": sql_index_list, "cpt_name": sql_cpt_name_list})
+# sql_index_df.to_csv(output_dir / "sql_index.csv", index=False)
 
 print(f"time taken for loading: {(time.time() - start_time)/60.0} minutes")
-
+print()
 cpts, skipped_records_df = filtering.filter_cpts(
     cpts = cpts,
     min_CPT_separation_dist_m=config.get_value("min_CPT_separation_dist_m"),
@@ -91,5 +106,33 @@ cpts, skipped_records_df = filtering.filter_cpts(
 
 skipped_records_df.to_csv(output_dir / "skipped_records.csv", index=False)
 
-print(f"total taken: {(time.time() - start_time)/60.0} minutes")
+vs_results_df = pd.DataFrame(columns=["cpt_name", "nztm_x", "nztm_y", "cpt_correlation", "vs30_correlation", "vs30", "vs30_sd"])
 
+available_cpt_vs_correlations = cpt_vs_correlations.CPT_CORRELATIONS.keys()
+available_vs30_correlations = vs30_correlations.VS30_CORRELATIONS.keys()
+
+vs_calc_start_time = time.time()
+
+for cpt in cpts:
+
+    for cpt_vs_correlation in available_cpt_vs_correlations:
+
+        for vs30_correlation in available_vs30_correlations:
+
+            cpt_vs_profile = VsProfile.from_cpt(cpt, cpt_vs_correlation)
+
+            cpt_vs_profile.vs30_correlation = vs30_correlation
+
+            vs_results_df = pd.concat([vs_results_df,
+                pd.DataFrame(
+                    {"cpt_name": [cpt.name],
+                     "nztm_x" : [cpt.nztm_x],
+                     "nztm_y" : [cpt.nztm_y],
+                     "cpt_correlation": [cpt_vs_correlation],
+                     "vs30_correlation": [cpt_vs_profile.vs30_correlation],
+                     "vs30": [cpt_vs_profile.vs30],
+                     "vs30_sd": [cpt_vs_profile.vs30_sd]})], ignore_index=True)
+
+print(f"time taken for vs calculation: {(time.time() - vs_calc_start_time)/60.0} minutes")
+vs_results_df.to_csv(output_dir / "vs_results.csv", index=False)
+print(f"total taken: {(time.time() - start_time)/60.0} minutes")

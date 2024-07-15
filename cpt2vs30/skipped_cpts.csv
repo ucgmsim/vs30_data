@@ -1,4 +1,4 @@
-cpt_name,reason,description
+cpt_name, reason, reason_description
 CPT_10 , Type 07 , depth range <5: 4.22
 CPT_100 , Type 06 , depth<5: 4.04
 CPT_1000 , Type 06 , depth<5: 2.68

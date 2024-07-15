@@ -119,28 +119,22 @@ def locs_multiple_records(cpt_locs, min_dist_m, stdout=False):
 
     return dup_locs
 
-if __name__=='__main__':
-    from sqlalchemy import create_engine, desc
-    from sqlalchemy.orm import sessionmaker
-    import load_sql_db
-
-    data_dir = "/home/arr65/vs30_data_input_data/sql"
-
-    engine = create_engine(f'sqlite:///{data_dir}/nz_cpt.db')
-    DBSession = sessionmaker(bind=engine)
-    session = DBSession()
-
-    locs = load_sql_db.cpt_locations(session)
-
-    num_cpt_to_do = 2000
-    locs = locs[:num_cpt_to_do]
-
-    #print(dict(locs[0]))
-
-    loc_dups_dict = locs_multiple_records(locs, stdout=True)
-
-
-
-    #
-    print()
-
+# if __name__=='__main__':
+#     from sqlalchemy import create_engine, desc
+#     from sqlalchemy.orm import sessionmaker
+#     import load_sql_db
+#
+#     data_dir = "/home/arr65/vs30_data_input_data/sql"
+#
+#     engine = create_engine(f'sqlite:///{data_dir}/nz_cpt.db')
+#     DBSession = sessionmaker(bind=engine)
+#     session = DBSession()
+#
+#     locs = load_sql_db.cpt_locations(session)
+#
+#     num_cpt_to_do = 2000
+#     locs = locs[:num_cpt_to_do]
+#
+#     #print(dict(locs[0]))
+#
+#     loc_dups_dict = locs_multiple_records(locs, stdout=True)
