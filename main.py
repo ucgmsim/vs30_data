@@ -113,7 +113,7 @@ available_vs30_correlations = vs30_correlations.VS30_CORRELATIONS.keys()
 
 vs_calc_start_time = time.time()
 
-for cpt in cpts:
+for count, cpt in enumerate(cpts):
 
     for cpt_vs_correlation in available_cpt_vs_correlations:
 
@@ -133,6 +133,12 @@ for cpt in cpts:
                      "vs30": [cpt_vs_profile.vs30],
                      "vs30_sd": [cpt_vs_profile.vs30_sd]})], ignore_index=True)
 
+    if count % 1000 == 0:  # print every 1000
+        print(f"{count + 1}/{len(cpts)}: {cpt.name}")
+        # Save every 1000 cpts
+        vs_results_df.to_csv(output_dir / "vs_results.csv", index=False)
+
+
 print(f"time taken for vs calculation: {(time.time() - vs_calc_start_time)/60.0} minutes")
-vs_results_df.to_csv(output_dir / "vs_results.csv", index=False)
+
 print(f"total taken: {(time.time() - start_time)/60.0} minutes")
