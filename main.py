@@ -49,9 +49,8 @@ if config.get_value("input_data_format") == "sql":
 
     cpt_locs = load_sql_db.cpt_locations(session)
 
-
-    num_cpt_to_do = 5000
-    cpt_locs = cpt_locs[:num_cpt_to_do]
+    # num_cpt_to_do = 5000
+    # cpt_locs = cpt_locs[:num_cpt_to_do]
 
     cpts = []
 
