@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Optional
 
 from qcore import geo
 import sys
@@ -59,7 +60,7 @@ def nztm_to_ll(nztm_x,nztm_y):
     return (latitude,longitude)
 
 
-def dist_to_closest_cpt(cpts: list[CPT]) -> pd.DataFrame:
+def dist_to_closest_cpt(cpts: list[CPT], output_dir: Optional[Path]= None) -> pd.DataFrame:
     """
     Gets the distance between each CPT and its closest neighbour.
 
@@ -74,7 +75,7 @@ def dist_to_closest_cpt(cpts: list[CPT]) -> pd.DataFrame:
            A DataFrame with the following columns:
             - cpt_name: the name of the CPT
             - distance_to_closest_cpt_km: the distance to the closest CPT in km
-            - nearest_cpt_name: the name of the closest CPT
+            - closest_cpt_name: the name of the closest CPT
             - lon: the longitude of the CPT
             - lat: the latitude of the CPT
             - closest_cpt_lon: the longitude of the closest CPT
@@ -110,13 +111,20 @@ def dist_to_closest_cpt(cpts: list[CPT]) -> pd.DataFrame:
         closest_cpt_lon.append(lonlats[bool_mask][idx, 0])
         closest_cpt_lat.append(lonlats[bool_mask][idx, 1])
 
-    return pd.DataFrame({"cpt_name": cpt_names,
+    closest_dist_df = pd.DataFrame({"cpt_name": cpt_names,
                          "distance_to_closest_cpt_km": distance_to_closest_cpt_km,
                          "closest_cpt_name": closest_cpt_name,
                          "lon": lons,
                          "lat": lats,
                          "closest_cpt_lon": closest_cpt_lon,
                          "closest_cpt_lat": closest_cpt_lat})
+
+    if output_dir:
+        closest_dist_df.to_csv(output_dir / "closest_cpt_distance.csv", index=False)
+
+    return closest_dist_df
+
+def filter_
 
 
 

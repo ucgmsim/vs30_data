@@ -236,7 +236,10 @@ def find_duplicated_locations(cpt_locs, min_CPT_separation_dist_m, dup_locs_outp
 
 def filter_cpts_on_location_duplicates(cpts, min_CPT_separation_dist_m, skipped_records_df, dup_locs_output_dir=None):
 
-    dup_locs_cpt_names = find_duplicated_locations(cpts, min_CPT_separation_dist_m, dup_locs_output_dir)
+    #dup_locs_cpt_names = find_duplicated_locations(cpts, min_CPT_separation_dist_m, dup_locs_output_dir)
+
+    closest_cpt_dist_df = loc_filter.dist_to_closest_cpt(cpts, dup_locs_output_dir)
+    dup_locs_cpt_names = closest_cpt_dist_df[closest_cpt_dist_df["distance_to_closest_cpt_km"] < min_CPT_separation_dist_m/1000.0]["cpt_name"].values
 
     if len(dup_locs_cpt_names) == 0:
         return cpts, skipped_records_df
