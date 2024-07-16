@@ -59,6 +59,67 @@ def nztm_to_ll(nztm_x,nztm_y):
     return (latitude,longitude)
 
 
+def dist_to_closest_cpt(cpts: list[CPT]) -> pd.DataFrame:
+    """
+    Gets the distance between each CPT and its closest neighbour.
+
+    Parameters
+    ----------
+    cpts : list[CPT]
+        A list of CPT objects..
+
+    Returns
+    -------
+    pd.DataFrame
+           A DataFrame with the following columns:
+            - cpt_name: the name of the CPT
+            - distance_to_closest_cpt_km: the distance to the closest CPT in km
+            - nearest_cpt_name: the name of the closest CPT
+            - lon: the longitude of the CPT
+            - lat: the latitude of the CPT
+            - closest_cpt_lon: the longitude of the closest CPT
+            - closest_cpt_lat: the latitude of the closest CPT
+    """
+
+    lats = []
+    lons = []
+    cpt_names = []
+
+    for cpt in cpts:
+        (lat, lon) = nztm_to_ll(cpt.nztm_x, cpt.nztm_y)
+        lats.append(lat)
+        lons.append(lon)
+        cpt_names.append(cpt.name)
+
+    cpt_names = np.array(cpt_names)
+    lonlats = np.array([lons, lats]).T
+
+    distance_to_closest_cpt_km = []
+    closest_cpt_name = []
+    closest_cpt_lon = []
+    closest_cpt_lat = []
+
+    for current_cpt_index in range(len(cpt_names)):
+        # mask out the row corresponding to the current cpt
+        bool_mask = np.arange(lonlats.shape[0]) != current_cpt_index
+        idx, d = geo.closest_location(locations=lonlats[bool_mask], lon=lonlats[current_cpt_index, 0],
+                                      lat=lonlats[current_cpt_index, 1])
+
+        distance_to_closest_cpt_km.append(d)
+        closest_cpt_name.append(cpt_names[bool_mask][idx])
+        closest_cpt_lon.append(lonlats[bool_mask][idx, 0])
+        closest_cpt_lat.append(lonlats[bool_mask][idx, 1])
+
+    return pd.DataFrame({"cpt_name": cpt_names,
+                         "distance_to_closest_cpt_km": distance_to_closest_cpt_km,
+                         "closest_cpt_name": closest_cpt_name,
+                         "lon": lons,
+                         "lat": lats,
+                         "closest_cpt_lon": closest_cpt_lon,
+                         "closest_cpt_lat": closest_cpt_lat})
+
+
+
 def locs_multiple_records(cpt_locs, min_dist_m, stdout=False):
 
     x=[]

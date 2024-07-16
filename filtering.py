@@ -9,6 +9,7 @@ import pandas as pd
 import yaml
 
 from vs_calc import CPT, VsProfile, calculate_weighted_vs30
+import matplotlib.pyplot as plt
 
 from cpt2vs30 import loc_filter
 
@@ -109,6 +110,32 @@ def values_less_than_threshold(cpt: CPT, threshold) -> Optional[pd.DataFrame]:
 
     return None
 
+# def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
+#
+#     """
+#     Check for values less than `threshold` in the CPT data.
+#
+#     Parameters
+#     ----------
+#     cpt : CPT
+#         A CPT object containing the data to check.
+#     threshold : float
+#         The threshold value to check against.
+#
+#     Returns
+#     -------
+#     pd.DataFrame or None
+#         If there are values less than `threshold`, returns a DataFrame with columns
+#         "cpt_name", "reason", and "reason_description".
+#         If there are no values less than `threshold`, returns None
+#     """
+#
+#     if any(value > max_num_allowed_repeated_digits for fs_value in cpt.Fs for value in count_digits(fs_value).values()):
+#         print()
+#         return skipped_record_entry(cpt.name, f"Type 05",
+# f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem")
+#     return None
+
 def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
 
     """
@@ -130,6 +157,46 @@ def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.Da
     """
 
     if any(value > max_num_allowed_repeated_digits for fs_value in cpt.Fs for value in count_digits(fs_value).values()):
+        print()
+        return skipped_record_entry(cpt.name, f"Type 05",
+f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem")
+    return None
+
+def repeated_digits_Andrew(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
+
+    """
+    Check for values less than `threshold` in the CPT data.
+
+    Parameters
+    ----------
+    cpt : CPT
+        A CPT object containing the data to check.
+    threshold : float
+        The threshold value to check against.
+
+    Returns
+    -------
+    pd.DataFrame or None
+        If there are values less than `threshold`, returns a DataFrame with columns
+        "cpt_name", "reason", and "reason_description".
+        If there are no values less than `threshold`, returns None
+    """
+
+    found_exceeding_digit = False  # Flag to indicate if the condition is met
+
+    for index, fs_value in enumerate(cpt.Fs):  # Step 1
+        digit_counts = count_digits(fs_value)  # Step 2
+        for value in digit_counts.values():  # Step 3
+            if value > max_num_allowed_repeated_digits:  # Step 4
+
+                print()
+                found_exceeding_digit = True  # Set the flag to True if condition is met
+                break  # Exit the loop as we only need one instance to satisfy the condition
+        if found_exceeding_digit:
+            break  # Exit the outer loop as well since the condition is satisfied
+
+    if found_exceeding_digit:
+        print()
         return skipped_record_entry(cpt.name, f"Type 05",
 f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem")
     return None
@@ -225,7 +292,6 @@ def filter_cpts(cpts: list[CPT], min_CPT_separation_dist_m: float,
 
     print(f"Time taken for filtering on data quality: {(time.time() - t1)/60} minutes")
     return data_quality_preserved_cpts, skipped_records_df
-
 
 
 
