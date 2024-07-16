@@ -139,21 +139,22 @@ def values_less_than_threshold(cpt: CPT, threshold) -> Optional[pd.DataFrame]:
 def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
 
     """
-    Check for values less than `threshold` in the CPT data.
+    Check if any data values have more than `max_num_allowed_repeated_digits` repeated digits
+    in case these were affected by instrumental error.
 
     Parameters
     ----------
     cpt : CPT
         A CPT object containing the data to check.
-    threshold : float
-        The threshold value to check against.
+    max_num_allowed_repeated_digits : int
+        The maximum allowable value of repeated digits in a data value.
 
     Returns
     -------
     pd.DataFrame or None
-        If there are values less than `threshold`, returns a DataFrame with columns
-        "cpt_name", "reason", and "reason_description".
-        If there are no values less than `threshold`, returns None
+        If any data values have more than `max_num_allowed_repeated_digits` repeated digits,
+        returns a DataFrame with columns "cpt_name", "reason", and "reason_description".
+        If no data values have more than `max_num_allowed_repeated_digits` repeated digits, returns None.
     """
 
     if any(value > max_num_allowed_repeated_digits for fs_value in cpt.Fs for value in count_digits(fs_value).values()):
@@ -202,7 +203,23 @@ f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possi
     return None
 
 def insufficient_depth(cpt: CPT, min_allowed_max_depth_m: float = 5.0) -> Optional[pd.DataFrame]:
+    """
+    Check that the maximum depth is greater than `min_allowed_max_depth_m`.
 
+    Parameters
+    ----------
+    cpt : CPT
+        A CPT object containing the data to check.
+    min_allowed_max_depth_m : float
+        The minimum allowable maximum depth.
+
+    Returns
+    -------
+    pd.DataFrame or None
+        If the maximum depth is less than `min_allowed_max_depth_m, returns a DataFrame with columns
+        "cpt_name", "reason", and "reason_description".
+        If the maximum depth is greater than `min_allowed_max_depth_m , returns None.
+    """
     if np.max(cpt.depth) < min_allowed_max_depth_m:
         return skipped_record_entry(cpt.name, f"Type 06", f"Maximum depth less than {min_allowed_max_depth_m} m")
 
@@ -210,31 +227,69 @@ def insufficient_depth(cpt: CPT, min_allowed_max_depth_m: float = 5.0) -> Option
 
 def insufficient_depth_span(cpt: CPT, min_allowed_depth_span_m) -> Optional[pd.DataFrame]:
 
+    """
+    Check that the depth span is greater than `min_allowed_depth_span_m`.
+
+    Parameters
+    ----------
+    cpt : CPT
+    min_allowed_depth_span_m : float
+
+    Returns
+    -------
+    pd.DataFrame or None
+        If the depth span is less than `min_allowed_depth_span_m, returns a DataFrame with columns
+        "cpt_name", "reason", and "reason_description".
+        If the depth span is greater than `min_allowed_max_depth_m , returns None.
+
+    """
+
     if (np.max(cpt.depth) - np.min(cpt.depth)) < min_allowed_depth_span_m:
         return skipped_record_entry(cpt.name, f"Type 07",f"depth span less than {min_allowed_depth_span_m} m")
     return None
 
-def find_duplicated_locations(cpt_locs, min_CPT_separation_dist_m, dup_locs_output_dir=None):
+# def find_duplicated_locations(cpt_locs, min_CPT_separation_dist_m, dup_locs_output_dir=None):
+#
+#     if dup_locs_output_dir is None:
+#         dup_locs_dict = loc_filter.locs_multiple_records(cpt_locs, min_CPT_separation_dist_m, stdout=False)
+#         return functools.reduce(operator.iconcat, list(dup_locs_dict.values()), [])
+#
+#     dup_locs_yaml_file = dup_locs_output_dir/"dup_locs.yaml"
+#     if dup_locs_yaml_file.exists():
+#         with open(dup_locs_output_dir/"dup_locs.yaml", 'r') as f:
+#             dup_locs_dict = yaml.load(f, Loader=yaml.SafeLoader)
+#     else:
+#         dup_locs_dict=loc_filter.locs_multiple_records(cpt_locs, min_CPT_separation_dist_m, stdout=False)
+#         #let's save this in a yaml file for future use
+#         with open(dup_locs_output_dir/"dup_locs.yaml","w") as f:
+#             yaml.safe_dump(dup_locs_dict,f)
+#
+#     dup_locs_dict = loc_filter.locs_multiple_records(cpt_locs, min_CPT_separation_dist_m, stdout=False)
+#
+#     return functools.reduce(operator.iconcat, list(dup_locs_dict.values()), [])
 
-    if dup_locs_output_dir is None:
-        dup_locs_dict = loc_filter.locs_multiple_records(cpt_locs, min_CPT_separation_dist_m, stdout=False)
-        return functools.reduce(operator.iconcat, list(dup_locs_dict.values()), [])
+def filter_cpts_on_location_duplicates(cpts : list[CPT], min_CPT_separation_dist_m : float,
+                                       skipped_records_df : pd.DataFrame, dup_locs_output_dir=Optional[Path]):
 
-    dup_locs_yaml_file = dup_locs_output_dir/"dup_locs.yaml"
-    if dup_locs_yaml_file.exists():
-        with open(dup_locs_output_dir/"dup_locs.yaml", 'r') as f:
-            dup_locs_dict = yaml.load(f, Loader=yaml.SafeLoader)
-    else:
-        dup_locs_dict=loc_filter.locs_multiple_records(cpt_locs, min_CPT_separation_dist_m, stdout=False)
-        #let's save this in a yaml file for future use
-        with open(dup_locs_output_dir/"dup_locs.yaml","w") as f:
-            yaml.safe_dump(dup_locs_dict,f)
+    """
+    Filter out CPTs with duplicate locations.
 
-    dup_locs_dict = loc_filter.locs_multiple_records(cpt_locs, min_CPT_separation_dist_m, stdout=False)
+    Parameters
+    ----------
+    cpts : list[CPT]
+        A list of CPT objects.
+    min_CPT_separation_dist_m : float
+        The minimum required distance between two CPTs to not be considered duplicates
+    skipped_records_df : pd.DataFrame
+        A DataFrame with columns "cpt_name", "reason", and "reason_description"
+    dup_locs_output_dir: Path, optional
+        If a Path, then a DataFrame containing the distance to the closest neighbouring CPT will be saved
+        in this directory
+        If None, the DataFrame will not be saved
+    Returns
+    -------
 
-    return functools.reduce(operator.iconcat, list(dup_locs_dict.values()), [])
-
-def filter_cpts_on_location_duplicates(cpts, min_CPT_separation_dist_m, skipped_records_df, dup_locs_output_dir=None):
+    """
 
     #dup_locs_cpt_names = find_duplicated_locations(cpts, min_CPT_separation_dist_m, dup_locs_output_dir)
 
