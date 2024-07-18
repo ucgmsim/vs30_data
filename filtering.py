@@ -1,3 +1,9 @@
+"""
+This module contains functions to filter out unusable CPT data.
+These functions are adapted from earlier work by Sung Bae in
+the cpt2vs30 package.
+"""
+
 import functools
 import multiprocessing
 from collections import Counter
@@ -60,9 +66,9 @@ def filtered_out_entry(
     )
 
 
-def no_data_in_cpt(cpt_name: str, cpt_record: np.array) -> Optional[pd.DataFrame]:
+def identify_no_data_in_cpt(cpt_name: str, cpt_record: np.array) -> Optional[pd.DataFrame]:
     """
-    Check if there is data in the CPT record.
+    Identify CPT records that contain no data.
 
     Parameters
     ----------

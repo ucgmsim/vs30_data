@@ -1,10 +1,10 @@
 """
-The main script to run the Vs30 estimation workflow
+The main script for calculating Vs30 values from CPT data.
 """
 
-import functools
+
 import glob
-import multiprocessing
+
 import time
 from pathlib import Path
 
@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 import config as cfg
 import filtering
+import run_calculations
 import load_sql_db
 from vs_calc import (
     CPT,
@@ -22,52 +23,6 @@ from vs_calc import (
     vs30_correlations,
 )
 
-
-def calculate_vs30_from_single_cpt(cpt: CPT, cpt_vs_correlations, vs30_correlations):
-
-    results_df_list = []
-
-    for cpt_vs_correlation in cpt_vs_correlations:
-
-        for vs30_correlation in vs30_correlations:
-
-            cpt_vs_profile = VsProfile.from_cpt(cpt, cpt_vs_correlation)
-
-            cpt_vs_profile.vs30_correlation = vs30_correlation
-
-            results_df_list.append(
-                pd.DataFrame(
-                    {
-                        "cpt_name": [cpt.name],
-                        "nztm_x": [cpt.nztm_x],
-                        "nztm_y": [cpt.nztm_y],
-                        "cpt_correlation": [cpt_vs_correlation],
-                        "vs30_correlation": [cpt_vs_profile.vs30_correlation],
-                        "vs30": [cpt_vs_profile.vs30],
-                        "vs30_sd": [cpt_vs_profile.vs30_sd],
-                    }
-                )
-            )
-
-    return pd.concat(results_df_list, ignore_index=True)
-
-
-def calculate_vs30_from_all_cpts(
-    cpts, cpt_vs_correlations, vs30_correlations, n_procs=1
-):
-
-    with multiprocessing.Pool(processes=n_procs) as pool:
-
-        results_df_list = pool.map(
-            functools.partial(
-                calculate_vs30_from_single_cpt,
-                cpt_vs_correlations=cpt_vs_correlations,
-                vs30_correlations=vs30_correlations,
-            ),
-            cpts,
-        )
-
-    return pd.concat(results_df_list, ignore_index=True)
 
 
 start_time = time.time()
@@ -107,11 +62,11 @@ if config.get_value("input_data_format") == "sql":
 
         cpt_records = load_sql_db.get_cpt_data(session, cpt_loc.name, columnwise=False)
 
-        skipped_record_from_filter = filtering.no_data_in_cpt(cpt_loc.name, cpt_records)
+        filtered_out_entry = filtering.identify_no_data_in_cpt(cpt_loc.name, cpt_records)
 
-        if skipped_record_from_filter is not None:
+        if filtered_out_entry is not None:
             filtered_out_df = pd.concat(
-                [filtered_out_df, skipped_record_from_filter], ignore_index=True
+                [filtered_out_df, filtered_out_entry], ignore_index=True
             )
             continue
 
@@ -166,7 +121,7 @@ cpts = filtering.apply_filters_to_cpts(
 print(f"time taken for filtering: {(time.time() - start_time)/60.0} minutes")
 
 vs_calc_start_time = time.time()
-vs30_results_df = calculate_vs30_from_all_cpts(
+vs30_results_df = run_calculations.calculate_vs30_from_all_cpts(
     cpts=cpts,
     cpt_vs_correlations=list(cpt_vs_correlations.CPT_CORRELATIONS.keys()),
     vs30_correlations=list(vs30_correlations.VS30_CORRELATIONS.keys()),
@@ -180,10 +135,10 @@ print(
 # Write output files
 filtered_out_df.to_csv(output_dir / "filtered_out_with_all_reasons.csv", index=False)
 vs30_results_df.to_csv(output_dir / "vs30_results.csv", index=False)
-
-
 filtered_out_df.drop_duplicates(subset="cpt_name", keep="first").to_csv(
     output_dir / "filtered_out_only_first_reason.csv", index=False
 )
+summary_df = pd.DataFrame({"num_remaining": num_cpts_remaining, "num_skipped": num_skipped_for_reason, "reason": reasons })
+
 
 print(f"total taken: {(time.time() - start_time)/60.0} minutes")

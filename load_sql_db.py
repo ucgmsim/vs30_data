@@ -1,4 +1,6 @@
-from collections import Counter
+"""
+Functions developed by Sung Bae to load CPT data from a SQL database.
+"""
 
 import numpy as np
 from sqlalchemy import (
@@ -10,18 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 
-
-def log_error(skipped_fp, cpt_name, error):
-    skipped_fp.write(f"{cpt_name} - {error}\n")
-
-
-def count_digits(arr):
-    stringified = str(arr).replace("0", "").replace(".", "")
-    return Counter(stringified)
-
-
 Base = declarative_base()
-
 
 class CPTLocation(Base):
     __tablename__ = "cpt_location"
