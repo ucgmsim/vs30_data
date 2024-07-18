@@ -1,14 +1,14 @@
 from collections import Counter
 
 import numpy as np
-
-from sqlalchemy import Column, ForeignKey, Integer, String, Float
+from sqlalchemy import (
+    Column,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
-from sqlalchemy import create_engine, desc
-from sqlalchemy.orm import sessionmaker
-
-from vs_calc import CPT, VsProfile, calculate_weighted_vs30
 
 
 def log_error(skipped_fp, cpt_name, error):
@@ -24,7 +24,7 @@ Base = declarative_base()
 
 
 class CPTLocation(Base):
-    __tablename__ = 'cpt_location'
+    __tablename__ = "cpt_location"
     id = Column(Integer, primary_key=True)
     #    customer_id=Column(Integer, ForeignKey('customers.id'))
     name = Column(String(20), nullable=False)  # 20210427_17
@@ -34,34 +34,55 @@ class CPTLocation(Base):
     nztm_y = Column(Float)
 
     def __iter__(self):  # overridding this to return tuples of (key,value)
-        return iter([('id', self.id), ('name', self.name), ('nztm_x', self.nztm_x), ('nztm_y', self.nztm_y)])
+        return iter(
+            [
+                ("id", self.id),
+                ("name", self.name),
+                ("nztm_x", self.nztm_x),
+                ("nztm_y", self.nztm_y),
+            ]
+        )
 
 
 class CPTDepthRecord(Base):
-    __tablename__ = 'cpt_depth_record'
+    __tablename__ = "cpt_depth_record"
     id = Column(Integer, primary_key=True)
     cpt_name = Column(String(20), nullable=False)  #
     depth = Column(Float)  #
     qc = Column(Float)  #
     fs = Column(Float)
     u = Column(Float)
-    loc_id = Column(Integer, ForeignKey('cpt_location.id'))
+    loc_id = Column(Integer, ForeignKey("cpt_location.id"))
 
     def __iter__(self):  # overridding this to return tuples of (key,value)
-        return iter([('id', self.id), ('depth', self.depth), ('qc', self.qc), ('fs', self.fs), ('u', self.u),
-                     ('loc_id', self.loc_id)])
+        return iter(
+            [
+                ("id", self.id),
+                ("depth", self.depth),
+                ("qc", self.qc),
+                ("fs", self.fs),
+                ("u", self.u),
+                ("loc_id", self.loc_id),
+            ]
+        )
 
 
 # not really useful, but presented as an example
-def cpt_records(session,cpt_name):
-    res = session.query(CPTDepthRecord).filter(CPTDepthRecord.cpt_name == cpt_name).all()
+def cpt_records(session, cpt_name):
+    res = (
+        session.query(CPTDepthRecord).filter(CPTDepthRecord.cpt_name == cpt_name).all()
+    )
     return res
 
 
 # not really useful, but presented as an example
-def max_depth_record(session,cpt_name):
-    res = session.query(CPTDepthRecord).filter(CPTDepthRecord.cpt_name == cpt_name).order_by(
-        CPTDepthRecord.depth.desc()).first()
+def max_depth_record(session, cpt_name):
+    res = (
+        session.query(CPTDepthRecord)
+        .filter(CPTDepthRecord.cpt_name == cpt_name)
+        .order_by(CPTDepthRecord.depth.desc())
+        .first()
+    )
     return res
 
 
@@ -70,14 +91,23 @@ def cpt_locations(session):
     return session.query(CPTLocation).all()
 
 
-def cpt_records_exists(session,cpt_name):
-    res = session.query(CPTDepthRecord).filter(CPTDepthRecord.cpt_name == cpt_name).first()
-    return (res is not None)
+def cpt_records_exists(session, cpt_name):
+    res = (
+        session.query(CPTDepthRecord)
+        .filter(CPTDepthRecord.cpt_name == cpt_name)
+        .first()
+    )
+    return res is not None
 
 
-def get_cpt_data(session,cpt_name, columnwise=True):
-    res = session.query(CPTDepthRecord.depth, CPTDepthRecord.qc, CPTDepthRecord.fs, CPTDepthRecord.u).filter(
-        CPTDepthRecord.cpt_name == cpt_name).all()
+def get_cpt_data(session, cpt_name, columnwise=True):
+    res = (
+        session.query(
+            CPTDepthRecord.depth, CPTDepthRecord.qc, CPTDepthRecord.fs, CPTDepthRecord.u
+        )
+        .filter(CPTDepthRecord.cpt_name == cpt_name)
+        .all()
+    )
     res_array = np.array(res)
     if columnwise:  # each column is grouped together
         res_array = res_array.T

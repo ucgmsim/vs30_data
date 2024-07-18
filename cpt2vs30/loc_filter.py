@@ -1,15 +1,13 @@
+import functools
+import math
+import multiprocessing
+from pathlib import Path
+from typing import Optional
+
 import numpy as np
 import pandas as pd
-from typing import Optional
-from pathlib import Path
-import multiprocessing
-import functools
-
 from qcore import geo
-import sys
-import math
 
-from cpt2vs30 import loc_filter
 
 def nztm_to_ll(nztm_x,nztm_y):
     #Common variables for NZTM2000

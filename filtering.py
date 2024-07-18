@@ -1,24 +1,38 @@
-from collections import Counter
-import numpy as np
-import functools, operator
-from pathlib import Path
-import time
-from typing import Optional
 import functools
 import multiprocessing
+from collections import Counter
+from pathlib import Path
+from typing import Optional
 
+import numpy as np
 import pandas as pd
 
-
-from vs_calc import CPT, VsProfile, calculate_weighted_vs30
-
 from cpt2vs30 import loc_filter
+from vs_calc import CPT
+
 
 def count_digits(arr):
+    """
+    Count the number of repeated digits in a data value.
+    This function was developed by Sung Bae.
+
+    Parameters
+    ----------
+    arr : a numerical data value
+
+    Returns
+    -------
+    Counter
+        A Counter object containing the number of repeated digits in the data value.
+
+    """
     stringified = str(arr).replace("0", "").replace(".", "")
     return Counter(stringified)
 
-def skipped_record_entry(cpt_name : str, reason: str, reason_description : str) -> pd.DataFrame:
+
+def filtered_out_entry(
+    cpt_name: str, reason: str, reason_description: str
+) -> pd.DataFrame:
     """
     Create a skipped record entry.
 
@@ -27,7 +41,9 @@ def skipped_record_entry(cpt_name : str, reason: str, reason_description : str) 
     cpt_name : str
         The name of a CPT record.
     reason : str
-        The reason for skipping the record.
+        The short form reason (such as a code) for skipping the record.
+    reason_description : str
+        A more detailed description of the reason for skipping the record.
 
     Returns
     -------
@@ -35,7 +51,13 @@ def skipped_record_entry(cpt_name : str, reason: str, reason_description : str) 
         A DataFrame with columns "cpt_name", "reason", and "reason_description".
     """
 
-    return pd.DataFrame({"cpt_name": [cpt_name], "reason": [reason], "reason_description": [reason_description]})
+    return pd.DataFrame(
+        {
+            "cpt_name": [cpt_name],
+            "reason": [reason],
+            "reason_description": [reason_description],
+        }
+    )
 
 
 def no_data_in_cpt(cpt_name: str, cpt_record: np.array) -> Optional[pd.DataFrame]:
@@ -53,15 +75,17 @@ def no_data_in_cpt(cpt_name: str, cpt_record: np.array) -> Optional[pd.DataFrame
     -------
     pd.DataFrame or None
         If there is no data, returns a DataFrame with columns "cpt_name", "reason", and "reason_description".
-        If there is data, returns None.
+        Otherwise, returns None.
     """
 
     if cpt_record.size == 0:
-        return skipped_record_entry(cpt_name, "Type 01", "No data in record")
+        return filtered_out_entry(cpt_name, "Type 01", "No data in record")
     return None
 
-def duplicated_depth_values(cpt: CPT, max_num_same_depth_values: int) -> Optional[pd.DataFrame]:
 
+def identify_duplicated_depth_values(
+    cpt: CPT, max_num_same_depth_values: int
+) -> Optional[pd.DataFrame]:
     """
     Check for duplicated depth values in the CPT data.
 
@@ -78,16 +102,18 @@ def duplicated_depth_values(cpt: CPT, max_num_same_depth_values: int) -> Optiona
     pd.DataFrame or None
         If there are more than `max_num_same_depth_values`, returns a DataFrame with columns
         "cpt_name", "reason", and "reason_description".
-        If there are not more than `max_num_same_depth_values`, returns None.
+        Otherwise, returns None.
     """
 
     u, c = np.unique(cpt.depth, return_counts=True)
     if np.any([c > max_num_same_depth_values]):
-        return skipped_record_entry(cpt.name, "Type 03","Duplicate depth detected - invalid CPT")
+        return filtered_out_entry(
+            cpt.name, "Type 03", "Duplicate depth detected - invalid CPT"
+        )
     return None
 
-def values_less_than_threshold(cpt: CPT, threshold) -> Optional[pd.DataFrame]:
 
+def identify_values_less_than_threshold(cpt: CPT, threshold) -> Optional[pd.DataFrame]:
     """
     Check for values less than `threshold` in the CPT data.
 
@@ -103,50 +129,28 @@ def values_less_than_threshold(cpt: CPT, threshold) -> Optional[pd.DataFrame]:
     pd.DataFrame or None
         If there are values less than `threshold`, returns a DataFrame with columns
         "cpt_name", "reason", and "reason_description".
-        If there are no values less than `threshold`, returns None
+        Otherwise, returns None
     """
     if any(cpt.Fs < threshold) or any(cpt.Qc < threshold) or any(cpt.u < threshold):
 
-        return skipped_record_entry(cpt.name, f"Type 04", f"Data values less than {threshold}")
+        return filtered_out_entry(
+            cpt.name, f"Type 04", f"Data values less than {threshold}"
+        )
 
     return None
 
-# def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
-#
-#     """
-#     Check for values less than `threshold` in the CPT data.
-#
-#     Parameters
-#     ----------
-#     cpt : CPT
-#         A CPT object containing the data to check.
-#     threshold : float
-#         The threshold value to check against.
-#
-#     Returns
-#     -------
-#     pd.DataFrame or None
-#         If there are values less than `threshold`, returns a DataFrame with columns
-#         "cpt_name", "reason", and "reason_description".
-#         If there are no values less than `threshold`, returns None
-#     """
-#
-#     if any(value > max_num_allowed_repeated_digits for fs_value in cpt.Fs for value in count_digits(fs_value).values()):
-#         print()
-#         return skipped_record_entry(cpt.name, f"Type 05",
-# f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem")
-#     return None
 
-def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
-
+def identify_repeated_digits(
+    cpt: CPT, max_num_allowed_repeated_digits
+) -> Optional[pd.DataFrame]:
     """
-    Check if any data values have more than `max_num_allowed_repeated_digits` repeated digits
-    in case these were affected by instrumental error.
+    Identify if any data values have more than `max_num_allowed_repeated_digits` repeated digits
+    in case these data were affected by instrumental issues.
 
     Parameters
     ----------
     cpt : CPT
-        A CPT object containing the data to check.
+        A CPT object containing the data.
     max_num_allowed_repeated_digits : int
         The maximum allowable value of repeated digits in a data value.
 
@@ -155,160 +159,119 @@ def repeated_digits(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.Da
     pd.DataFrame or None
         If any data values have more than `max_num_allowed_repeated_digits` repeated digits,
         returns a DataFrame with columns "cpt_name", "reason", and "reason_description".
-        If no data values have more than `max_num_allowed_repeated_digits` repeated digits, returns None.
+        Otherwise, returns None.
     """
 
-    if any(value > max_num_allowed_repeated_digits for fs_value in cpt.Fs for value in count_digits(fs_value).values()):
-        #print()
-        return skipped_record_entry(cpt.name, f"Type 05",
-f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem")
+    if any(
+        value > max_num_allowed_repeated_digits
+        for fs_value in cpt.Fs
+        for value in count_digits(fs_value).values()
+    ):
+        # print()
+        return filtered_out_entry(
+            cpt.name,
+            f"Type 05",
+            f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem",
+        )
     return None
 
-def repeated_digits_Andrew(cpt: CPT, max_num_allowed_repeated_digits) -> Optional[pd.DataFrame]:
 
+def identify_insufficient_depth(
+    cpt: CPT, min_allowed_max_depth_m: float = 5.0
+) -> Optional[pd.DataFrame]:
     """
-    Check for values less than `threshold` in the CPT data.
+    Identify if the CPT has a maximum depth is less than `min_allowed_max_depth_m`.
 
     Parameters
     ----------
     cpt : CPT
-        A CPT object containing the data to check.
-    threshold : float
-        The threshold value to check against.
-
-    Returns
-    -------
-    pd.DataFrame or None
-        If there are values less than `threshold`, returns a DataFrame with columns
-        "cpt_name", "reason", and "reason_description".
-        If there are no values less than `threshold`, returns None
-    """
-
-    found_exceeding_digit = False  # Flag to indicate if the condition is met
-
-    for index, fs_value in enumerate(cpt.Fs):  # Step 1
-        digit_counts = count_digits(fs_value)  # Step 2
-        for value in digit_counts.values():  # Step 3
-            if value > max_num_allowed_repeated_digits:  # Step 4
-
-                #print()
-                found_exceeding_digit = True  # Set the flag to True if condition is met
-                break  # Exit the loop as we only need one instance to satisfy the condition
-        if found_exceeding_digit:
-            break  # Exit the outer loop as well since the condition is satisfied
-
-    if found_exceeding_digit:
-        #print()
-        return skipped_record_entry(cpt.name, f"Type 05",
-f"More than {max_num_allowed_repeated_digits} repeated digits indicating a possible instrument problem")
-    return None
-
-def insufficient_depth(cpt: CPT, min_allowed_max_depth_m: float = 5.0) -> Optional[pd.DataFrame]:
-    """
-    Check that the maximum depth is greater than `min_allowed_max_depth_m`.
-
-    Parameters
-    ----------
-    cpt : CPT
-        A CPT object containing the data to check.
+        A CPT object containing the data.
     min_allowed_max_depth_m : float
         The minimum allowable maximum depth.
 
     Returns
     -------
     pd.DataFrame or None
-        If the maximum depth is less than `min_allowed_max_depth_m, returns a DataFrame with columns
+        If the maximum depth is less than `min_allowed_max_depth_m`, returns a DataFrame with columns
         "cpt_name", "reason", and "reason_description".
-        If the maximum depth is greater than `min_allowed_max_depth_m , returns None.
+        Otherwise, returns None.
     """
+
     if np.max(cpt.depth) < min_allowed_max_depth_m:
-        return skipped_record_entry(cpt.name, f"Type 06", f"Maximum depth less than {min_allowed_max_depth_m} m")
+        return filtered_out_entry(
+            cpt.name, f"Type 06", f"Maximum depth less than {min_allowed_max_depth_m} m"
+        )
 
     return None
 
-def insufficient_depth_span(cpt: CPT, min_allowed_depth_span_m) -> Optional[pd.DataFrame]:
 
+def identify_insufficient_depth_span(
+    cpt: CPT, min_allowed_depth_span_m
+) -> Optional[pd.DataFrame]:
     """
-    Check that the depth span is greater than `min_allowed_depth_span_m`.
+    Identify if the CPT has a depth span less than `min_allowed_depth_span_m`.
 
     Parameters
     ----------
     cpt : CPT
+       A CPT object containing the data.
     min_allowed_depth_span_m : float
+        The minimum allowable depth span.
 
     Returns
     -------
     pd.DataFrame or None
         If the depth span is less than `min_allowed_depth_span_m, returns a DataFrame with columns
         "cpt_name", "reason", and "reason_description".
-        If the depth span is greater than `min_allowed_max_depth_m, returns None.
+        Otherwise, returns None.
 
     """
 
     if (np.max(cpt.depth) - np.min(cpt.depth)) < min_allowed_depth_span_m:
-        return skipped_record_entry(cpt.name, f"Type 07",f"depth span less than {min_allowed_depth_span_m} m")
+        return filtered_out_entry(
+            cpt.name, f"Type 07", f"depth span less than {min_allowed_depth_span_m} m"
+        )
     return None
 
 
-### Uses Sung code above
-# def OLD_filter_cpts_on_location_duplicates(cpts : list[CPT], min_CPT_separation_dist_m : float,
-#                                        skipped_records_df : pd.DataFrame, dup_locs_output_dir=Optional[Path]):
-#
-#     """
-#     Filter out CPTs with duplicate locations.
-#
-#     Parameters
-#     ----------
-#     cpts : list[CPT]
-#         A list of CPT objects.
-#     min_CPT_separation_dist_m : float
-#         The minimum required distance between two CPTs to not be considered duplicates
-#     skipped_records_df : pd.DataFrame
-#         A DataFrame with columns "cpt_name", "reason", and "reason_description"
-#     dup_locs_output_dir: Path, optional
-#         If a Path, then a DataFrame containing the distance to the closest neighbouring CPT will be saved
-#         in this directory
-#         If None, the DataFrame will not be saved
-#     Returns
-#     -------
-#     pd.DataFrame or None
-#         If the distance between a CPT and its closest neighbour is less than `min_CPT_separation_dist_m`,
-#         returns a DataFrame with columns "cpt_name", "reason", and "reason_description".
-#         Otherwise, returns None.
-#     """
-#
-#     dup_locs_cpt_names = find_duplicated_locations(cpts, min_CPT_separation_dist_m, dup_locs_output_dir)
-#
-#     # closest_cpt_dist_df = loc_filter.dist_to_closest_cpt(cpts, dup_locs_output_dir)
-#     # dup_locs_cpt_names = closest_cpt_dist_df[closest_cpt_dist_df["distance_to_closest_cpt_km"] < min_CPT_separation_dist_m/1000.0]["cpt_name"].values
-#
-#     if len(dup_locs_cpt_names) == 0:
-#         return cpts, skipped_records_df
-#
-#     preserved_cpts = []
-#
-#     for cpt in cpts:
-#
-#         if cpt.name in dup_locs_cpt_names:
-#             skipped_records_df = pd.concat([skipped_records_df, skipped_record_entry(cpt.name, f"Type 02", f"CPT within {min_CPT_separation_dist_m} m of another CPT")])
-#             continue
-#
-#         preserved_cpts.append(cpt)
-#
-#     return preserved_cpts, skipped_records_df
+def identify_location_duplication(
+    cpt: CPT, sep_dist_dup_name_tup: tuple[float, list[str]]
+) -> Optional[pd.DataFrame]:
 
-def filter_cpt_on_location_duplication(cpt: CPT, sep_dist_dup_name_tup: tuple) -> Optional[pd.DataFrame]:
+    """
+    Identify if a CPT is within `min_CPT_separation_dist_m` of another CPT.
+
+    Parameters
+    ----------
+    cpt: CPT
+        A CPT object containing the data.
+    sep_dist_dup_name_tup: tuple[float, list[str]
+        A tuple containing two items.
+            `min_CPT_separation_dist_m` is the first item
+            `duplicate_location_cpt_names` is the second item
+
+    Returns
+    -------
+    pd.DataFrame or None
+        If the CPT is within `min_CPT_separation_dist_m` of another CPT, returns a DataFrame with columns
+        "cpt_name", "reason", and "reason_description".
+        Otherwise, returns None.
+    """
 
     min_CPT_separation_dist_m, duplicate_location_cpt_names = sep_dist_dup_name_tup
 
     if cpt.name in duplicate_location_cpt_names:
-        return skipped_record_entry(cpt.name, f"Type 02", f"CPT within {min_CPT_separation_dist_m} m of another CPT")
+        return filtered_out_entry(
+            cpt.name,
+            f"Type 02",
+            f"CPT within {min_CPT_separation_dist_m} m of another CPT",
+        )
     return None
 
 
-def filter_single_cpt_on_data_quality(cpt: CPT, data_quality_filters: list[callable],
-                                      data_quality_filter_params: list) -> Optional[pd.DataFrame]:
-
+def identify_why_cpt_filtered_out(
+    cpt: CPT, filters: list[callable], filter_params: list
+) -> Optional[pd.DataFrame]:
     """
     Filter a single cpt using its data quality. This function
     needs no information about other cpts.
@@ -317,9 +280,9 @@ def filter_single_cpt_on_data_quality(cpt: CPT, data_quality_filters: list[calla
     ----------
     cpts : list[CPT]
         A list of CPT objects.
-    data_quality_filters : list[callable]
+    filters : list[callable]
         A list of functions that take a CPT object and return a DataFrame if the CPT should be skipped.
-    data_quality_filter_params : list
+    filter_params : list
         A list of parameters to pass to the data quality filters.
     Returns
     -------
@@ -329,20 +292,21 @@ def filter_single_cpt_on_data_quality(cpt: CPT, data_quality_filters: list[calla
     """
 
     skipped_records = []
-    for idx, filter in enumerate(data_quality_filters):
-        skipped_records.append(filter(cpt, data_quality_filter_params[idx]))
-
-    # if skipped_records.count(None) == len(skipped_records):
-    #     return None
+    for idx, filter in enumerate(filters):
+        skipped_records.append(filter(cpt, filter_params[idx]))
 
     if any(isinstance(item, pd.DataFrame) for item in skipped_records):
         return pd.concat(skipped_records, ignore_index=True)
     return None
 
 
-def identify_cpts_to_filter(cpts: list[CPT], filters: list[callable], filter_params: list,
-                skipped_records_df: pd.DataFrame, n_procs : int = 1):
-
+def identify_cpts_to_filter_out(
+    cpts: list[CPT],
+    filters: list[callable],
+    filter_params: list,
+    filtered_out_df: pd.DataFrame,
+    n_procs: int = 1,
+):
     """
     Filter a list of cpts.
     This function needs the locations of all cpts.
@@ -353,11 +317,11 @@ def identify_cpts_to_filter(cpts: list[CPT], filters: list[callable], filter_par
         A CPT objects containing data.
     min_CPT_separation_dist_m : float
         The minimum required distance between two CPTs to not be considered duplicates.
-    data_quality_filters : list[callable]
+    filters : list[callable]
         A list of functions that take a CPT object and return a DataFrame if the CPT should be skipped.
-    data_quality_filter_params : list
+    filter_params : list
         A list of parameters to pass to the data quality filters.
-    skipped_records_df : pd.DataFrame
+    filtered_out_df : pd.DataFrame
         A DataFrame with columns "cpt_name", "reason", and "reason_description".
     dup_locs_output_dir: Path, optional
         If a Path, then a DataFrame containing the distance to the closest neighbouring CPT will be saved
@@ -372,54 +336,55 @@ def identify_cpts_to_filter(cpts: list[CPT], filters: list[callable], filter_par
 
     with multiprocessing.Pool(processes=n_procs) as pool:
 
-        skipped_record_entry_list = pool.map(functools.partial(filter_single_cpt_on_data_quality,
-                                                            data_quality_filters=filters,
-                                                            data_quality_filter_params=filter_params), cpts)
-        
-    skipped_records_df = pd.concat([skipped_records_df, *skipped_record_entry_list], ignore_index=True)
+        skipped_record_entry_list = pool.map(
+            functools.partial(
+                identify_why_cpt_filtered_out,
+                filters=filters,
+                filter_params=filter_params,
+            ),
+            cpts,
+        )
 
-    return skipped_records_df
+    filtered_out_df = pd.concat(
+        [filtered_out_df, *skipped_record_entry_list], ignore_index=True
+    )
+
+    return filtered_out_df
 
 
-def apply_filter_to_single_cpt(cpt: CPT, names_to_filter: list):
+def apply_filter_to_single_cpt(cpt: CPT, names_to_filter_out: list):
 
-    if cpt.name not in names_to_filter:
+    if cpt.name not in names_to_filter_out:
 
         return cpt
 
     else:
-        pass
+        return None
 
 
-
-
-def apply_filters_to_cpts(cpts, names_to_filter, n_procs : int = 1):
+def apply_filters_to_cpts(cpts, names_to_filter_out, n_procs: int = 1):
 
     with multiprocessing.Pool(processes=n_procs) as pool:
 
-        remaining_cpts = pool.map(functools.partial(apply_filter_to_single_cpt, names_to_filter=names_to_filter), cpts)
+        remaining_cpts = pool.map(
+            functools.partial(
+                apply_filter_to_single_cpt, names_to_filter_out=names_to_filter_out
+            ),
+            cpts,
+        )
 
     remaining_cpts = [cpt for cpt in remaining_cpts if cpt is not None]
 
     return remaining_cpts
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-def get_dup_loc_names(min_CPT_separation_dist_m,
-        cpts: list, n_procs : int = 1, output_dir : Optional[Path] = None, load_from_previous : Optional[Path] = None):
-
+def get_dup_loc_names(
+    min_CPT_separation_dist_m,
+    cpts: list,
+    n_procs: int = 1,
+    output_dir: Optional[Path] = None,
+    load_from_previous: Optional[Path] = None,
+):
     """
     Get a list of CPTs with duplicate locations.
 
@@ -442,15 +407,21 @@ def get_dup_loc_names(min_CPT_separation_dist_m,
     if load_from_previous:
         return np.loadtxt(load_from_previous)
 
-    all_dist_to_closest_cpt_df = loc_filter.get_all_dist_to_closest_cpt(cpts, n_procs = n_procs, output_dir = output_dir)
+    all_dist_to_closest_cpt_df = loc_filter.get_all_dist_to_closest_cpt(
+        cpts, n_procs=n_procs, output_dir=output_dir
+    )
 
     duplicate_cpt_df = all_dist_to_closest_cpt_df[
-        all_dist_to_closest_cpt_df["distance_to_closest_cpt_km"] < (min_CPT_separation_dist_m / 1000.0)]
+        all_dist_to_closest_cpt_df["distance_to_closest_cpt_km"]
+        < (min_CPT_separation_dist_m / 1000.0)
+    ]
 
     unique_names = np.unique(duplicate_cpt_df[["cpt_name", "closest_cpt_name"]].values)
 
     if output_dir is not None:
-        duplicate_cpt_df.to_csv(output_dir / "closest_cpt_distance_duplicate_locs.csv", index=False)
+        duplicate_cpt_df.to_csv(
+            output_dir / "closest_cpt_distance_duplicate_locs.csv", index=False
+        )
         np.savetxt(output_dir / "duplicate_cpt_names.txt", unique_names, fmt="%s")
 
     return list(unique_names)
