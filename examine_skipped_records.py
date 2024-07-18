@@ -67,7 +67,9 @@ unique_cpt_names_count = skipped_records_df['cpt_name'].nunique()
 #                                    skiprows=1,
 #                                    skipfooter=1)
 
-sung_skipped_records = pd.read_csv("cpt2vs30/skipped_cpts.csv", sep=",")
+#sung_skipped_records = pd.read_csv("cpt2vs30/skipped_cpts.csv", sep=",")
+sung_skipped_records = pd.read_csv("/home/arr65/Data/cpt/outdir/zmax_20m_vs_cap/skipped_cpts", sep=",")
+
 sung_skipped_records["reason"] = sung_skipped_records["reason"].str.strip()
 
 sung_skipped_records['cpt_name'] = sung_skipped_records['cpt_name'].str.strip()

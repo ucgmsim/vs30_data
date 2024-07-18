@@ -1,6 +1,8 @@
 #input_data_dir: "/home/arr65/vs30_data_input_data/csv"
 #input_data_format : "csv"
 
+n_procs : 7
+
 input_data_dir : "/home/arr65/vs30_data_input_data/sql"
 input_data_format : "sql"
 
