@@ -3,3 +3,4 @@ SQLAlchemy
 numpy
 qcore @ git+https://github.com/ucgmsim/qcore.git
 PyYAML
+pyproj

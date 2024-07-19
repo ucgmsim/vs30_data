@@ -2,9 +2,7 @@
 The main script for calculating Vs30 values from CPT data.
 """
 
-
 import glob
-
 import time
 from pathlib import Path
 
@@ -14,16 +12,13 @@ from sqlalchemy.orm import sessionmaker
 
 import config as cfg
 import filtering
-import run_calculations
 import load_sql_db
+import run_calculations
 from vs_calc import (
     CPT,
-    VsProfile,
     cpt_vs_correlations,
     vs30_correlations,
 )
-
-
 
 start_time = time.time()
 
@@ -48,9 +43,9 @@ if config.get_value("input_data_format") == "sql":
     session = DBSession()
 
     cpt_locs = load_sql_db.cpt_locations(session)
+    initial_num_cpts = len(cpt_locs)
 
-    # num_cpt_to_do = 5000
-    # cpt_locs = cpt_locs[0:5000]
+    # cpt_locs = cpt_locs[0:100]
 
     cpts = []
 
@@ -62,7 +57,9 @@ if config.get_value("input_data_format") == "sql":
 
         cpt_records = load_sql_db.get_cpt_data(session, cpt_loc.name, columnwise=False)
 
-        filtered_out_entry = filtering.identify_no_data_in_cpt(cpt_loc.name, cpt_records)
+        filtered_out_entry = filtering.identify_no_data_in_cpt(
+            cpt_loc.name, cpt_records
+        )
 
         if filtered_out_entry is not None:
             filtered_out_df = pd.concat(
@@ -85,12 +82,20 @@ if config.get_value("input_data_format") == "sql":
 
 print(f"time taken for loading: {(time.time() - start_time)/60.0} minutes")
 
+dup_loc_names_t0 = time.time()
+
 dup_loc_names = filtering.get_dup_loc_names(
     min_CPT_separation_dist_m=config.get_value("min_CPT_separation_dist_m"),
     cpts=cpts,
     n_procs=config.get_value("n_procs"),
     output_dir=output_dir,
 )
+
+print(
+    f"time taken for finding dup loc names: {(time.time() - dup_loc_names_t0)/60.0} minutes"
+)
+
+identify_cpts_to_filter_out_t0_start_time = time.time()
 
 filtered_out_df = filtering.identify_cpts_to_filter_out(
     cpts=cpts,
@@ -113,12 +118,19 @@ filtered_out_df = filtering.identify_cpts_to_filter_out(
     filtered_out_df=filtered_out_df,
     n_procs=config.get_value("n_procs"),
 )
+print(
+    f"time taken to identify cpts to filter out: {(time.time() - identify_cpts_to_filter_out_t0_start_time)/60.0} minutes"
+)
+
+apply_filtering_start_time = time.time()
 
 cpts = filtering.apply_filters_to_cpts(
     cpts, list(filtered_out_df["cpt_name"]), n_procs=config.get_value("n_procs")
 )
 
-print(f"time taken for filtering: {(time.time() - start_time)/60.0} minutes")
+print(
+    f"time taken to apply filtering: {(time.time() - apply_filtering_start_time)/60.0} minutes"
+)
 
 vs_calc_start_time = time.time()
 vs30_results_df = run_calculations.calculate_vs30_from_all_cpts(
@@ -134,11 +146,17 @@ print(
 
 # Write output files
 filtered_out_df.to_csv(output_dir / "filtered_out_with_all_reasons.csv", index=False)
-vs30_results_df.to_csv(output_dir / "vs30_results.csv", index=False)
+summary_df = filtering.summarize_filtered_out_df(
+    filtered_out_df.drop_duplicates(subset="cpt_name", keep="first"), initial_num_cpts
+)
+summary_df.to_csv(output_dir / "filtering_summary.csv", index=False)
 filtered_out_df.drop_duplicates(subset="cpt_name", keep="first").to_csv(
     output_dir / "filtered_out_only_first_reason.csv", index=False
 )
-summary_df = pd.DataFrame({"num_remaining": num_cpts_remaining, "num_skipped": num_skipped_for_reason, "reason": reasons })
+
+
+vs30_results_df.to_csv(output_dir / "vs30_results.csv", index=False)
 
 
 print(f"total taken: {(time.time() - start_time)/60.0} minutes")
+

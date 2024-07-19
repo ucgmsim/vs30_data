@@ -13,7 +13,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from cpt2vs30 import loc_filter
+import run_calculations
 from vs_calc import CPT
 
 
@@ -66,7 +66,9 @@ def filtered_out_entry(
     )
 
 
-def identify_no_data_in_cpt(cpt_name: str, cpt_record: np.array) -> Optional[pd.DataFrame]:
+def identify_no_data_in_cpt(
+    cpt_name: str, cpt_record: np.array
+) -> Optional[pd.DataFrame]:
     """
     Identify CPT records that contain no data.
 
@@ -121,7 +123,7 @@ def identify_duplicated_depth_values(
 
 def identify_values_less_than_threshold(cpt: CPT, threshold) -> Optional[pd.DataFrame]:
     """
-    Check for values less than `threshold` in the CPT data.
+    Identify if a CPT's data has values less than `threshold`.
 
     Parameters
     ----------
@@ -243,7 +245,6 @@ def identify_insufficient_depth_span(
 def identify_location_duplication(
     cpt: CPT, sep_dist_dup_name_tup: tuple[float, list[str]]
 ) -> Optional[pd.DataFrame]:
-
     """
     Identify if a CPT is within `min_CPT_separation_dist_m` of another CPT.
 
@@ -358,7 +359,23 @@ def identify_cpts_to_filter_out(
     return filtered_out_df
 
 
-def apply_filter_to_single_cpt(cpt: CPT, names_to_filter_out: list):
+def apply_filter_to_single_cpt(cpt: CPT, names_to_filter_out: list[str]):
+    """
+    Filters out a CPT if it was previously identified as needing to be filtered out.
+
+    Parameters
+    ----------
+    cpt : CPT
+        A CPT object containing the data.
+    names_to_filter_out : list[str]
+        A list of CPT names to filter out.
+
+    Returns
+    -------
+    CPT or None
+       - None if the CPT is filtered out
+       - CPT otherwise
+    """
 
     if cpt.name not in names_to_filter_out:
 
@@ -369,6 +386,23 @@ def apply_filter_to_single_cpt(cpt: CPT, names_to_filter_out: list):
 
 
 def apply_filters_to_cpts(cpts, names_to_filter_out, n_procs: int = 1):
+    """
+    Filters out a CPT if it was previously identified as needing to be filtered out.
+
+    Parameters
+    ----------
+    cpts : list[CPT]
+        A list of CPT objects.
+    names_to_filter_out : list[str]
+        A list of CPT names to filter out.
+    n_procs: int
+        The number of processes to use for the calculation.
+
+    Returns
+    -------
+    list[CPT]
+        A list of CPT objects that were not filtered out.
+    """
 
     with multiprocessing.Pool(processes=n_procs) as pool:
 
@@ -385,25 +419,31 @@ def apply_filters_to_cpts(cpts, names_to_filter_out, n_procs: int = 1):
 
 
 def get_dup_loc_names(
-    min_CPT_separation_dist_m,
-    cpts: list,
+    min_CPT_separation_dist_m: float,
+    cpts: list[CPT],
     n_procs: int = 1,
     output_dir: Optional[Path] = None,
     load_from_previous: Optional[Path] = None,
-):
+) -> list[str]:
     """
     Get a list of CPTs with duplicate locations.
 
     Parameters
     ----------
-    cpts : list[CPT]
-        A list of CPT objects.
     min_CPT_separation_dist_m : float
         The minimum required distance between two CPTs to not be considered duplicates.
-    dup_locs_output_dir: Path, optional
+    cpts : list[CPT]
+        A list of CPT objects.
+    n_procs : int
+        The number of processes to use for the calculation.
+    output_dir : Path, optional
         If a Path, then a DataFrame containing the distance to the closest neighbouring CPT will be saved
-        in this directory
-        If None, the DataFrame will not be saved
+        in this directory.
+        If None, the DataFrame will not be saved.
+    load_from_previous : Path, optional
+        If a Path, then the list of CPT names with duplicate locations will be loaded from this file.
+        If None, the list will be calculated.
+
     Returns
     -------
     list[str]
@@ -413,7 +453,7 @@ def get_dup_loc_names(
     if load_from_previous:
         return np.loadtxt(load_from_previous)
 
-    all_dist_to_closest_cpt_df = loc_filter.get_all_dist_to_closest_cpt(
+    all_dist_to_closest_cpt_df = run_calculations.get_all_dist_to_closest_cpt(
         cpts, n_procs=n_procs, output_dir=output_dir
     )
 
@@ -431,3 +471,50 @@ def get_dup_loc_names(
         np.savetxt(output_dir / "duplicate_cpt_names.txt", unique_names, fmt="%s")
 
     return list(unique_names)
+
+
+def summarize_filtered_out_df(
+    filtered_out_df: pd.DataFrame, initial_num_cpts: int
+) -> pd.DataFrame:
+    """
+    Summarize the filtered out DataFrame.
+
+    Parameters
+    ----------
+    filtered_out_df : pd.DataFrame
+        A DataFrame containing the filtered out data.
+    initial_num_cpts : int
+        The initial number of CPTs before filtering.
+
+    Returns
+    -------
+    pd.DataFrame
+        A DataFrame containing the summarized data.
+    """
+
+    counts = filtered_out_df["reason"].value_counts()
+
+    reason_code_description_dict = {
+        "Type 01": "No data in record",
+        "Type 02": "CPT too close to another CPT",
+        "Type 03": "Duplicate depth detected - invalid CPT",
+        "Type 04": "Data values less than threshold",
+        "Type 05": "Repeated digits indicating a possible instrument problem",
+        "Type 06": "Insufficient maximum depth",
+        "Type 07": "Insufficient depth span",
+    }
+
+    description_list = [
+        reason_code_description_dict.get(reason, reason) for reason in counts.index
+    ]
+
+    summary_df = pd.DataFrame(
+        {
+            "num_remaining": initial_num_cpts - counts.values,
+            "num_skipped": counts,
+            "reason": counts.index,
+            "reason_description": description_list,
+        }
+    ).reset_index(drop=True)
+
+    return summary_df
