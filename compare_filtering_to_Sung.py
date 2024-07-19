@@ -23,7 +23,6 @@ skipped_records_df_dropped_duplicates = skipped_records_df.drop_duplicates(
     subset="cpt_name", keep="first"
 )
 
-
 sung_skipped_records = pd.read_csv(
     "/home/arr65/Data/cpt/outdir/zmax_20m_vs_cap/skipped_cpts", sep=","
 )
@@ -35,7 +34,7 @@ merged_df = sung_skipped_records.merge(
     skipped_records_df_dropped_duplicates,
     how="outer",
     on="cpt_name",
-    suffixes=("_sung", "_ours"),
+    suffixes=("_sung", "_andrew"),
 )
 merged_df["reasons_match"] = merged_df["reason_sung"] == merged_df["reason_ours"]
 
@@ -43,4 +42,7 @@ merged_df.to_csv(output_dir / "post_merged_skipped_records.csv")
 
 merged_df_mismatch = merged_df[~merged_df["reasons_match"]]
 merged_df_mismatch.to_csv(output_dir / "post_merged_skipped_records_mismatch.csv")
+
+
+
 
