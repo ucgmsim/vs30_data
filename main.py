@@ -97,13 +97,13 @@ print(
 
 identify_cpts_to_filter_out_t0_start_time = time.time()
 
+# Note also implemented but not used below is filtering.identify_repeated_digits
 filtered_out_df = filtering.identify_cpts_to_filter_out(
     cpts=cpts,
     filters=[
         filtering.identify_location_duplication,
         filtering.identify_duplicated_depth_values,
         filtering.identify_values_less_than_threshold,
-        # filtering.identify_repeated_digits,
         filtering.identify_insufficient_depth,
         filtering.identify_insufficient_depth_span,
     ],
@@ -111,7 +111,6 @@ filtered_out_df = filtering.identify_cpts_to_filter_out(
         (config.get_value("min_CPT_separation_dist_m"), dup_loc_names),
         config.get_value("max_num_same_depth_values"),
         config.get_value("min_allowed_data_value"),
-        # config.get_value("max_num_allowed_repeated_digits"),
         config.get_value("min_allowed_max_depth_m"),
         config.get_value("min_allowed_depth_span_m"),
     ],
