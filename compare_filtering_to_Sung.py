@@ -44,5 +44,3 @@ merged_df_mismatch = merged_df[~merged_df["reasons_match"]]
 merged_df_mismatch.to_csv(output_dir / "post_merged_skipped_records_mismatch.csv")
 
 
-
-

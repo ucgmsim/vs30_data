@@ -29,8 +29,11 @@ print(merged_df_vs30s["diff"].median())
 
 merged_df_vs30s.to_csv(Path("/home/arr65/vs30_data_output") / "vs30_diff_andrew_sung.csv")
 
+print()
+
 ## Correlations
 #mcgann_2015
 
 # boore_2004
 # boore_2011
+
