@@ -7,6 +7,9 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from qcore import geo
+from qcore import coordinates
+from tqdm import tqdm
+import natsort
 
 
 def nztm_to_ll(nztm_x,nztm_y):
@@ -289,22 +292,72 @@ def locs_multiple_records(cpt_locs, min_dist_m, stdout=False):
 #
 #     return closest_dist_df
 #
-# # if __name__=='__main__':
-# #     from sqlalchemy import create_engine, desc
-# #     from sqlalchemy.orm import sessionmaker
-# #     import load_sql_db
-# #
-# #     data_dir = "/home/arr65/vs30_data_input_data/sql"
-# #
-# #     engine = create_engine(f'sqlite:///{data_dir}/nz_cpt.db')
-# #     DBSession = sessionmaker(bind=engine)
-# #     session = DBSession()
-# #
-# #     locs = load_sql_db.cpt_locations(session)
-# #
-# #     num_cpt_to_do = 2000
-# #     locs = locs[:num_cpt_to_do]
-# #
-# #     #print(dict(locs[0]))
-# #
-# #     loc_dups_dict = locs_multiple_records(locs, stdout=True)
+if __name__=='__main__':
+    from sqlalchemy import create_engine, desc
+    from sqlalchemy.orm import sessionmaker
+    import load_sql_db
+
+    data_dir = "/home/arr65/vs30_data_input_data/sql"
+
+    engine = create_engine(f'sqlite:///{data_dir}/nz_cpt.db')
+    DBSession = sessionmaker(bind=engine)
+    session = DBSession()
+
+    locs = load_sql_db.cpt_locations(session)
+
+    num_cpt_to_do = 2000
+    #locs = locs[:num_cpt_to_do]
+    sung_id_df = pd.DataFrame({"cpt_name": [loc.name for loc in locs],
+                          "id" : [loc.id for loc in locs],
+                          "nztm_x": [loc.nztm_x for loc in locs],
+                          "nztm_y": [loc.nztm_y for loc in locs],
+                          "type": [loc.type for loc in locs]})
+    print()
+    ### filter to only include rows that have "CPT" in the cpt_name
+    sung_id_df = sung_id_df[sung_id_df["type"] == "CPT"]
+    sung_id_df = sung_id_df.reset_index(drop=True)
+
+    nztm_array = sung_id_df[["nztm_y", "nztm_x"]].to_numpy()
+
+    lat_lon = coordinates.nztm_to_wgs_depth(nztm_array)
+    sung_id_df["lat"] = lat_lon[:, 0]
+    sung_id_df["lon"] = lat_lon[:, 1]
+
+    sung_id_df["closest_idx"] = 0
+    sung_id_df["closest_nzgd_cpt_id"] = 'nothing'
+    sung_id_df["closest_dist"] = 1e6
+
+    nzgd_df = pd.read_csv("/home/arr65/data/nzgd/nzgd_index_files/csv_files/NZGD_Investigation_Report_25092024_1043.csv")
+
+    ## filter to only include rows that have column "Type" == "CPT"
+    nzgd_df = nzgd_df[nzgd_df["Type"] == "CPT"]
+    nzgd_df = nzgd_df.reset_index(drop=True)
+
+    nzgd_lon_lat = nzgd_df[["Longitude","Latitude"]].to_numpy()
+
+    for sung_df_idx in tqdm(range(len(sung_id_df))):
+
+        closest_idx, d = geo.closest_location(locations=nzgd_lon_lat, lon=sung_id_df.at[sung_df_idx, "lon"],
+                                      lat=sung_id_df.at[sung_df_idx, "lat"])
+
+        sung_id_df.loc[sung_df_idx, "closest_idx"] = closest_idx
+
+        sung_id_df.loc[sung_df_idx, "closest_nzgd_cpt_id"] = nzgd_df.loc[closest_idx, "ID"]
+        sung_id_df.loc[sung_df_idx, "closest_dist"] = d
+
+    sung_id_df = sung_id_df.sort_values(by="cpt_name", key=natsort.natsort_keygen())
+    sung_id_df.to_csv("/home/arr65/data/nzgd/stats_plots/sung_id_with_nzgd_match.csv", index=True)
+
+    print()
+
+    sung_id_df_name_mismatch = sung_id_df[sung_id_df["cpt_name"] != sung_id_df["closest_nzgd_cpt_id"]]
+
+    max_dist = 0.1
+
+
+    dist_filter_sung_id_df = sung_id_df[sung_id_df["closest_dist"] < max_dist]
+
+    print()
+
+
+    #loc_dups_dict = locs_multiple_records(locs, stdout=True)
