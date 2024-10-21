@@ -305,7 +305,7 @@ if __name__=='__main__':
 
     locs = load_sql_db.cpt_locations(session)
 
-    num_cpt_to_do = 2000
+    #num_cpt_to_do = 100
     #locs = locs[:num_cpt_to_do]
     sung_id_df = pd.DataFrame({"cpt_name": [loc.name for loc in locs],
                           "id" : [loc.id for loc in locs],
