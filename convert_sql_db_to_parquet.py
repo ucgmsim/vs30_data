@@ -15,7 +15,7 @@ import download_nzgd_data.validation.load_sql_db as load_sql_db
 
 
 old_data_dir = Path("/home/arr65/vs30_data_input_data/sql")
-parquet_output_dir = Path("/home/arr65/vs30_data_input_data/parquet_v2/data")
+parquet_output_dir = Path("/home/arr65/vs30_data_input_data/parquet/data")
 parquet_conversion_meta_output_dir = parquet_output_dir.parent / "meta"
 parquet_conversion_meta_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -36,34 +36,47 @@ cpt_with_size_zero = []
 cpt_ids_with_other_exceptions = []
 other_exceptions = []
 
+cpts_dfs_with_valid_size = []
+
+###  Confirm which CPTs from the previous SQL dataset have a size greater than 0
 for row_n, cpt_loc in tqdm(enumerate(cpt_locs), total=len(cpt_locs)):
-    
+    cpt_records = load_sql_db.get_cpt_data(session, cpt_loc.name, columnwise=False)
+
+    if cpt_records.size > 0:
+        cpts_dfs_with_valid_size.append(cpt_loc.name)
+
+valid_cpts_df = pd.DataFrame(cpts_dfs_with_valid_size, columns=["cpt_name"])
+valid_cpts_df.to_csv(parquet_conversion_meta_output_dir / "valid_cpts.csv")
+
+### Convert the CPTs with a size greater than 0 to parquet
+for row_n, cpt_loc in tqdm(enumerate(cpt_locs), total=len(cpt_locs)):
+
     try:
 
         cpt_records = load_sql_db.get_cpt_data(session, cpt_loc.name, columnwise=False)
-    
+
         if cpt_records.size == 0:
             cpt_with_size_zero.append(cpt_loc.name)
             continue
-    
+
         old_df = pd.DataFrame(cpt_records, columns=["Depth", "qc", "fs", "u"])
-    
+
         old_df.attrs["nztm_x"] = cpt_loc.nztm_x
         old_df.attrs["nztm_y"] = cpt_loc.nztm_y
-    
+
         latlon = coordinates.nztm_to_wgs_depth(np.array([cpt_loc.nztm_y, cpt_loc.nztm_x]))
-    
+
         old_df.attrs["lat"] = latlon[0]
         old_df.attrs["lon"] = latlon[1]
-    
+
         old_df.attrs["cpt_name"] = cpt_loc.name
-    
+
         old_df.insert(0, "record_name", cpt_loc.name)
         old_df.insert(1, "latitude", latlon[0])
         old_df.insert(2, "longitude", latlon[1])
-    
+
         old_df.to_parquet(parquet_output_dir / f"{cpt_loc.name}.parquet")
-    
+
     except Exception as e:
         cpt_ids_with_other_exceptions.append(cpt_loc.name)
         other_exceptions.append(e)
