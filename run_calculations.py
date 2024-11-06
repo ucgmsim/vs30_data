@@ -8,6 +8,7 @@ import functools
 import multiprocessing
 from pathlib import Path
 from typing import Optional
+import numpy.typing as npt
 
 import numpy as np
 import pandas as pd
@@ -118,16 +119,19 @@ def calculate_vs30_from_all_cpts(
     return pd.concat(results_df_list, ignore_index=True)
 
 
-def calc_dist_to_closest_cpt(cpt: CPT, all_long_lat_df: pd.DataFrame) -> pd.DataFrame:
+def calc_dist_to_closest_cpt(long_lat_to_consider_df: pd.DataFrame, all_long_lat_df: pd.DataFrame) -> pd.DataFrame:
+
     """
-    Calculates the distance between a CPT and its closest neighbour.
+    Calculates the distance between a single CPT and its closest neighbour.
 
     Parameters
     ----------
-    cpt : CPT
-        A CPT object.
+    long_lat_to_consider_df : pd.Series
+        A Pandas Series containing the record name, longitude, and latitude of a single CPT.
+
     all_long_lat_df : pd.DataFrame
-        A DataFrame containing the longitudes and latitudes of all the CPTs.
+        A DataFrame containing the record name, longitude, and latitude of all CPTs from which to find the
+        closest neighbour.
 
     Returns
     -------
@@ -141,46 +145,48 @@ def calc_dist_to_closest_cpt(cpt: CPT, all_long_lat_df: pd.DataFrame) -> pd.Data
             - closest_cpt_lon: the longitude of the closest CPT
             - closest_cpt_lat: the latitude of the closest CPT
     """
-    ## nztm_x and nztm_y are in the opposite order to the order in which they are used in the function
-    ## as the function uses a different definition of x and y
-    latlon = coordinates.nztm_to_wgs_depth(np.array([cpt.nztm_y, cpt.nztm_x]))
 
-    all_lon_lats = all_long_lat_df[["lon", "lat"]].to_numpy()
-    all_cpt_names = all_long_lat_df["cpt_name"].to_numpy()
+    all_cpt_names = all_long_lat_df["record_name"].values
+    # If the CPT to consider is among the CPTs from which to find the closest neighbour, filter it out
+    all_bool_mask = all_cpt_names != long_lat_to_consider_df["record_name"]
 
-    # mask out the row corresponding to the current cpt
-    all_bool_mask = all_cpt_names != np.array([cpt.name])
+    needed_rows_long_lat_df = all_long_lat_df[all_bool_mask]
 
+    nd_array_lon_lat = needed_rows_long_lat_df[["longitude","latitude"]].to_numpy()
     idx, d = geo.closest_location(
-        locations=all_lon_lats[all_bool_mask], lon=latlon[1], lat=latlon[0]
+        locations=nd_array_lon_lat, lon=long_lat_to_consider_df["longitude"], lat=long_lat_to_consider_df["latitude"]
     )
 
     closest_dist_df = pd.DataFrame(
         {
-            "cpt_name": [cpt.name],
-            "distance_to_closest_cpt_km": [d],
-            "closest_cpt_name": [str(all_cpt_names[all_bool_mask][idx])],
-            "lon": [latlon[1]],
-            "lat": [latlon[0]],
-            "closest_cpt_lon": [all_lon_lats[all_bool_mask][idx, 0]],
-            "closest_cpt_lat": [all_lon_lats[all_bool_mask][idx, 1]],
-        }
+            "cpt_name": long_lat_to_consider_df["record_name"],
+            "distance_to_closest_cpt_km": d,
+            "closest_cpt_name": str(all_cpt_names[all_bool_mask][idx]),
+            "lon": long_lat_to_consider_df["longitude"],
+            "lat": long_lat_to_consider_df["latitude"],
+            "closest_cpt_lon": nd_array_lon_lat[idx, 0],
+            "closest_cpt_lat": nd_array_lon_lat[idx, 1],
+        }, index = [0]
     )
+
     return closest_dist_df
 
 
 def calc_all_closest_cpt_dist(
-    cpts: list[CPT], all_lon_lat_df: pd.DataFrame, n_procs: Optional[int] = 1
+    lon_lat_to_consider_df: pd.DataFrame, all_lon_lat_df: pd.DataFrame, n_procs: Optional[int] = 1
 ) -> pd.DataFrame:
     """
     For each CPT in the list, calculates the distance between the CPT and its closest neighbour.
 
     Parameters
     ----------
-    cpts : list[CPT]
-        A list of CPT objects.
+    lon_lat_to_consider_df : pd.DataFrame
+        A DataFrame containing the record name, longitude and latitude of all the CPTs
+        that should have the distance to their nearest neighbour calculated.
+
     all_long_lat_df : pd.DataFrame
-        A DataFrame containing the longitudes and latitudes of all the CPTs.
+        A DataFrame containing the record name, longitude and latitude of all the CPTs from which the closest neighbour
+        to each CPT in lon_lat_to_consider_df should be found.
     n_procs : int
         The number of processes to use for the calculation
 
@@ -197,11 +203,14 @@ def calc_all_closest_cpt_dist(
             - closest_cpt_lat: the latitude of the closest CPT
     """
 
+    list_of_rows_as_series = []
+    for index, row in lon_lat_to_consider_df.iterrows():
+        list_of_rows_as_series.append(row)
     with multiprocessing.Pool(processes=n_procs) as pool:
 
         closest_cpt_df_list = pool.map(
             functools.partial(calc_dist_to_closest_cpt, all_long_lat_df=all_lon_lat_df),
-            cpts,
+            list_of_rows_as_series,
         )
 
     return pd.concat(closest_cpt_df_list, ignore_index=True)
@@ -255,48 +264,3 @@ def calc_all_ll(cpts: list[CPT], n_procs: Optional[int] = 1) -> pd.DataFrame:
 
     return pd.concat(all_ll, ignore_index=True)
 
-
-def get_all_dist_to_closest_cpt(
-    cpts: list,
-    n_procs: int = 1,
-    output_dir: Optional[Path] = None,
-    load_from_previous: Optional[Path] = None,
-) -> pd.DataFrame:
-    """
-    For all CPTs in the list, get the distance to their closest neighbour.
-
-    Parameters
-    ----------
-    cpts : list[CPT]
-        A list of CPT objects.
-    n_procs : int
-        The number of processes to use for the calculation.
-    output_dir : Path, Optional
-        If a path is provided, the results will be saved to a csv file in the directory.
-    load_from_previous : Path, Optional
-        If a path is provided, the results will be loaded from the csv file.
-
-    Returns
-    -------
-    pd.DataFrame
-           A DataFrame with the following columns:
-            - cpt_name: the name of the CPT
-            - distance_to_closest_cpt_km: the distance to the closest CPT in km
-            - closest_cpt_name: the name of the closest CPT
-            - lon: the longitude of the CPT
-            - lat: the latitude of the CPT
-            - closest_cpt_lon: the longitude of the closest CPT
-            - closest_cpt_lat: the latitude of the closest CPT
-    """
-
-    if load_from_previous:
-        return pd.read_csv(load_from_previous)
-
-    calc_all_ll_df = calc_all_ll(cpts, n_procs)
-
-    closest_cpt_df = calc_all_closest_cpt_dist(cpts, calc_all_ll_df, n_procs)
-
-    if output_dir:
-        closest_cpt_df.to_csv(output_dir / "closest_cpt_distance.csv", index=False)
-
-    return closest_cpt_df
