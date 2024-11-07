@@ -11,6 +11,8 @@ old_data_dir = Path("/home/arr65/vs30_data_input_data/parquet/data")
 
 metadata_dir = Path("/home/arr65/data/nzgd/processed_data/cpt/metadata")
 
+num_procs = 8
+
 ### Setting the station_id to be the record_name for compatibility with functions that use record_name
 estimated_vs30_ll_df = pd.read_csv(estimated_vs30_dir/"non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll",
                                 sep=" ",
@@ -43,7 +45,7 @@ if (metadata_dir / "closest_vs30_grid_point.csv").exists():
 else:
     closest_vs30_grid_point = run_calculations.calc_all_closest_cpt_dist(lon_lat_to_consider_df=new_df_not_in_old,
                                                             all_lon_lat_df=estimated_vs30_ll_df,
-                                                            n_procs=7)
+                                                            n_procs=num_procs)
     pass
 
 vs30_predictions = []
@@ -64,7 +66,7 @@ closest_vs30_grid_point = closest_vs30_grid_point.rename(columns={
     "cpt_name": "record_name"})
 
 closest_df = run_calculations.calc_all_closest_cpt_dist(lon_lat_to_consider_df=new_df_not_in_old,
-                                                        all_lon_lat_df=old_df, n_procs=7)
+                                                        all_lon_lat_df=old_df, n_procs=num_procs)
 
 merged_df = closest_vs30_grid_point.merge(closest_df[["cpt_name","distance_to_closest_cpt_km"]], left_on='record_name', right_on='cpt_name')
 merged_df.drop(columns=["cpt_name"], inplace=True)
